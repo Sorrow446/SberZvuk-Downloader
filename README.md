@@ -1,5 +1,5 @@
 # SberZvuk-Downloader
-SberZvuk (СберЗвук) downloader written in Go.
+[SberZvuk (СберЗвук)](https://dereferer.me/?https://sber-zvuk.com/) downloader written in Go.
 ![](https://i.imgur.com/wx90jGV.png)
 [Windows, Linux and macOS binaries](https://github.com/Sorrow446/SberZvuk-Downloader/releases)
 
