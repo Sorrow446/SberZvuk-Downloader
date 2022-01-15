@@ -654,7 +654,8 @@ func main() {
 				continue
 			}
 			trackFname := parseTemplate(cfg.TrackTemplate, parsedMeta)
-			trackPath := filepath.Join(albumPath, trackFname+quality.Extension)
+			sanTrackFname := sanitize(trackFname)
+			trackPath := filepath.Join(albumPath, sanTrackFname+quality.Extension)
 			exists, err := fileExists(trackPath)
 			if err != nil {
 				fmt.Printf("Failed to check if track already exists locally.\n%s", err)
@@ -675,22 +676,22 @@ func main() {
 			}
 			err = writeTags(trackPath, coverPath, quality.IsFlac, parsedMeta)
 			if err != nil {
-				fmt.Println("Failed to write tags.\n", err)
+				fmt.Printf("Failed to write tags.\n%s", err)
 				continue
 			}
 			if cfg.Lyrics {
 				lyrics, err := getLyrics(trackIdStr, token)
 				if err != nil {
-					fmt.Println("Failed to get lyrics.\n", err)
+					fmt.Printf("Failed to get lyrics.\n%s", err)
 					break
 				}
 				if lyrics == "" {
 					break
 				}
-				lyricsPath := filepath.Join(albumPath, trackFname+".lrc")
+				lyricsPath := filepath.Join(albumPath, sanTrackFname+".lrc")
 				err = writeLyrics(lyrics, lyricsPath)
 				if err != nil {
-					fmt.Println("Failed to write lyrics.\n", err)
+					fmt.Printf("Failed to write lyrics.\n%s", err)
 					break
 				}
 				fmt.Println("Wrote lyrics.")
