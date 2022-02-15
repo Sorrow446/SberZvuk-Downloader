@@ -28,7 +28,10 @@ import (
 	"github.com/go-flac/go-flac"
 )
 
-const apiBase = "https://sber-zvuk.com/"
+const (
+	apiBase     = "https://sber-zvuk.com/"
+	regexString = `^https://sber-zvuk.com/release/(\d+)$`
+)
 
 var (
 	jar, _     = cookiejar.New(nil)
@@ -201,7 +204,6 @@ func makeDirs(path string) error {
 }
 
 func checkUrl(url string) string {
-	const regexString = `^https://sber-zvuk.com/release/(\d+)$`
 	regex := regexp.MustCompile(regexString)
 	match := regex.FindStringSubmatch(url)
 	if match == nil {
@@ -342,7 +344,7 @@ func queryRetQuality(streamUrl string) *Quality {
 	qualityMap := map[string]Quality{
 		"/stream?":   {"128 Kbps MP3", ".mp3", false},
 		"/streamhq?": {"320 Kbps MP3", ".mp3", false},
-		"/streamfl?": {"16-bit / 44.1 kHz FLAC", ".flac", true},
+		"/streamfl?": {"FLAC", ".flac", true},
 	}
 	for k, v := range qualityMap {
 		if strings.Contains(streamUrl, k) {
@@ -683,16 +685,16 @@ func main() {
 				lyrics, err := getLyrics(trackIdStr, token)
 				if err != nil {
 					fmt.Printf("Failed to get lyrics.\n%s", err)
-					break
+					continue
 				}
 				if lyrics == "" {
-					break
+					continue
 				}
 				lyricsPath := filepath.Join(albumPath, sanTrackFname+".lrc")
 				err = writeLyrics(lyrics, lyricsPath)
 				if err != nil {
 					fmt.Printf("Failed to write lyrics.\n%s", err)
-					break
+					continue
 				}
 				fmt.Println("Wrote lyrics.")
 			}
