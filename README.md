@@ -38,7 +38,7 @@ Positional arguments:
 
 Options:
   --format FORMAT, -f FORMAT
-                         Download format. 1 = 128 Kbps MP3, 2 = 320 Kbps MP3, 3 = 16/44 FLAC. [default: -1]
+                         Download format. 1 = 128 Kbps MP3, 2 = 320 Kbps MP3, 3 = 16/24-bit FLAC. [default: -1]
   --outpath OUTPATH, -o OUTPATH
                          Where to download to. Path will be made if it doesn't already exist.
   --maxcover, -m         true = max cover size, false = 600x600.
