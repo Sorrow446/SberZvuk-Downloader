@@ -10,7 +10,7 @@ Configure any other options if needed.
 | --- | --- |
 |email|Email address.
 |password|Password.
-|format|Download format. 1 = 128 Kbps MP3, 2 = 320 Kbps MP3, 3 = 16/44 FLAC.
+|format|Download format. 1 = 128 Kbps MP3, 2 = 320 Kbps MP3, 3 = 16/24-bit FLAC.
 |outPath|Where to download to. Path will be made if it doesn't already exist.
 |trackTemplate|Track filename naming template. Vars: album, albumArtist, artist, genre, title, track, trackPad, trackTotal, year.
 |maxCover|true = max cover size, false = 600x600.
@@ -38,7 +38,7 @@ Positional arguments:
 
 Options:
   --format FORMAT, -f FORMAT
-                         Download format. 1 = 128 Kbps MP3, 2 = 320 Kbps MP3, 3 = 16/24-bit FLAC. [default: -1]
+                         Download format. 1 = 128 Kbps MP3, 2 = 320 Kbps MP3, 3 = 16/44 FLAC. [default: -1]
   --outpath OUTPATH, -o OUTPATH
                          Where to download to. Path will be made if it doesn't already exist.
   --maxcover, -m         true = max cover size, false = 600x600.
