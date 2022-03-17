@@ -67,13 +67,19 @@ func initErr(errText string, err error) {
 	panic(errString)
 }
 
+func wasRunFromSrc() bool {
+	buildPath := filepath.Join(os.TempDir(), "go-build")
+	return strings.HasPrefix(os.Args[0], buildPath)
+}
+
 func getScriptDir() (string, error) {
 	var (
 		ok    bool
 		err   error
 		fname string
 	)
-	if filepath.IsAbs(os.Args[0]) {
+	runFromSrc := wasRunFromSrc()
+	if runFromSrc {
 		_, fname, _, ok = runtime.Caller(0)
 		if !ok {
 			return "", errors.New("Failed to get script filename.")
@@ -84,8 +90,7 @@ func getScriptDir() (string, error) {
 			return "", err
 		}
 	}
-	scriptDir := filepath.Dir(fname)
-	return scriptDir, nil
+	return filepath.Dir(fname), nil
 }
 
 func readTxtFile(path string) ([]string, error) {
@@ -398,7 +403,7 @@ func parseTemplate(templateText string, tags map[string]string) string {
 }
 
 func downloadTrack(trackPath, url string) error {
-	f, err := os.Create(trackPath)
+	f, err := os.OpenFile(trackPath, os.O_CREATE|os.O_WRONLY, 0755)
 	if err != nil {
 		return err
 	}
