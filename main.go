@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/alexflint/go-arg"
 	"github.com/bogem/id3v2"
@@ -29,6 +30,7 @@ import (
 )
 
 const (
+	megabyte    = 1000000
 	apiBase     = "https://sber-zvuk.com/"
 	regexString = `^https://sber-zvuk.com/release/(\d+)$`
 )
@@ -54,17 +56,26 @@ func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func (wc *WriteCounter) Write(p []byte) (int, error) {
+	var speed int64 = 0
 	n := len(p)
-	wc.Downloaded += uint64(n)
+	wc.Downloaded += int64(n)
 	percentage := float64(wc.Downloaded) / float64(wc.Total) * float64(100)
 	wc.Percentage = int(percentage)
-	fmt.Printf("\r%d%%, %s/%s ", wc.Percentage, humanize.Bytes(wc.Downloaded), wc.TotalStr)
+	toDivideBy := time.Now().UnixMilli() - wc.StartTime
+	if toDivideBy != 0 {
+		speed = int64(wc.Downloaded) / toDivideBy * 1000
+	}
+	fmt.Printf("\r%d%% @ %s/s, %s/%s ", wc.Percentage, humanize.Bytes(uint64(speed)),
+		humanize.Bytes(uint64(wc.Downloaded)), wc.TotalStr)
 	return n, nil
 }
 
-func initErr(errText string, err error) {
+func handleErr(errText string, err error, _panic bool) {
 	errString := fmt.Sprintf("%s\n%s", errText, err)
-	panic(errString)
+	if _panic {
+		panic(errString)
+	}
+	fmt.Println(errString)
 }
 
 func wasRunFromSrc() bool {
@@ -95,14 +106,17 @@ func getScriptDir() (string, error) {
 
 func readTxtFile(path string) ([]string, error) {
 	var lines []string
-	f, err := os.Open(path)
+	f, err := os.OpenFile(path, os.O_RDONLY, 0755)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		lines = append(lines, strings.TrimSpace(scanner.Text()))
+		line := strings.TrimSpace(scanner.Text())
+		if line != "" {
+			lines = append(lines, strings.TrimSpace(scanner.Text()))
+		}
 	}
 	if scanner.Err() != nil {
 		return nil, scanner.Err()
@@ -151,6 +165,17 @@ func parseCfg() (*Config, error) {
 		return nil, err
 	}
 	args := parseArgs()
+	if args.SpeedLimit != -1 {
+		cfg.SpeedLimit = args.SpeedLimit
+	}
+	if cfg.SpeedLimit != -1 && cfg.SpeedLimit <= 0 {
+		return nil, errors.New("Invalid speed limit.")
+	}
+	cfg.ByteLimit = int64(megabyte * cfg.SpeedLimit)
+	if cfg.SpeedLimit != -1 {
+		fmt.Printf("Download speed limiting is active, limit: %s/s.\n",
+			humanize.Bytes(uint64(cfg.ByteLimit)))
+	}
 	if args.Format != -1 {
 		cfg.Format = args.Format
 	}
@@ -402,7 +427,7 @@ func parseTemplate(templateText string, tags map[string]string) string {
 	return buffer.String()
 }
 
-func downloadTrack(trackPath, url string) error {
+func downloadTrack(trackPath, url string, byteLimit int64) error {
 	f, err := os.OpenFile(trackPath, os.O_CREATE|os.O_WRONLY, 0755)
 	if err != nil {
 		return err
@@ -421,9 +446,23 @@ func downloadTrack(trackPath, url string) error {
 	if do.StatusCode != http.StatusOK && do.StatusCode != http.StatusPartialContent {
 		return errors.New(do.Status)
 	}
-	totalBytes := uint64(do.ContentLength)
-	counter := &WriteCounter{Total: totalBytes, TotalStr: humanize.Bytes(totalBytes)}
-	_, err = io.Copy(f, io.TeeReader(do.Body, counter))
+	totalBytes := do.ContentLength
+	counter := &WriteCounter{Total: totalBytes, TotalStr: humanize.Bytes(uint64(totalBytes)),
+		StartTime: time.Now().UnixMilli()}
+	if byteLimit == -1000000 {
+		_, err = io.Copy(f, io.TeeReader(do.Body, counter))
+	} else {
+		for range time.Tick(time.Second * 1) {
+			_, err = io.CopyN(f, io.TeeReader(do.Body, counter), byteLimit)
+			if errors.Is(err, io.EOF) {
+				err = nil
+				break
+			}
+			if err != nil {
+				break
+			}
+		}
+	}
 	fmt.Println("")
 	return err
 }
@@ -472,8 +511,7 @@ func writeFlacTags(decTrackPath string, tags map[string]string, imgData []byte) 
 		pictureMeta := picture.Marshal()
 		f.Meta = append(f.Meta, &pictureMeta)
 	}
-	err = f.Save(decTrackPath)
-	return err
+	return f.Save(decTrackPath)
 }
 
 func writeMp3Tags(decTrackPath string, tags map[string]string, imgData []byte) error {
@@ -507,8 +545,7 @@ func writeMp3Tags(decTrackPath string, tags map[string]string, imgData []byte) e
 		}
 		tag.AddAttachedPicture(imgFrame)
 	}
-	err = tag.Save()
-	return err
+	return tag.Save()
 }
 
 func writeTags(decTrackPath, coverPath string, isFlac bool, tags map[string]string) error {
@@ -565,8 +602,8 @@ func writeLyrics(lyrics, path string) error {
 		return err
 	}
 	defer f.Close()
-	f.Write([]byte(lyrics))
-	return nil
+	_, err = f.WriteString(lyrics)
+	return err
 }
 
 func main() {
@@ -586,19 +623,19 @@ func main() {
 	}
 	cfg, err := parseCfg()
 	if err != nil {
-		initErr("Failed to parse config file.", err)
+		handleErr("Failed to parse config file.", err, true)
 	}
 	err = makeDirs(cfg.OutPath)
 	if err != nil {
-		initErr("Failed to make output folder.", err)
+		handleErr("Failed to make output path.", err, true)
 	}
 	token, err := auth(cfg.Email, cfg.Password)
 	if err != nil {
-		initErr("Failed to auth.", err)
+		handleErr("Failed to auth.", err, true)
 	}
 	userInfo, err := getUserInfo(token)
 	if err != nil {
-		initErr("Failed to get user info.", err)
+		handleErr("Failed to get user info.", err, true)
 	}
 	if reflect.ValueOf(userInfo.Result.Subscription).IsZero() {
 		panic("Subscription required.")
@@ -616,7 +653,7 @@ func main() {
 		}
 		meta, err := getMeta(albumId, token)
 		if err != nil {
-			fmt.Printf("Failed to fetch album metadata.\n%s", err)
+			handleErr("Failed to get album metadata.", err, false)
 			continue
 		}
 		albumRelease := meta.Result.Releases[albumId]
@@ -630,14 +667,14 @@ func main() {
 		albumPath := filepath.Join(cfg.OutPath, sanitize(albumFolder))
 		err = makeDirs(albumPath)
 		if err != nil {
-			fmt.Println("Failed to make album folder.\n", err)
+			handleErr("Failed to make album folder.", err, false)
 			continue
 		}
 		trackIds := albumRelease.TrackIds
 		coverPath := filepath.Join(albumPath, "cover.jpg")
 		err = downloadCover(albumRelease.Image.Src, coverPath, cfg.MaxCover)
 		if err != nil {
-			fmt.Println("Failed to get cover.\n", err)
+			handleErr("Failed to get cover.", err, false)
 			coverPath = ""
 		}
 		trackTotal := len(trackIds)
@@ -651,7 +688,7 @@ func main() {
 			}
 			streamMeta, err := getStreamMeta(trackIdStr, cfg.FormatStr, token)
 			if err != nil {
-				fmt.Println("Failed to get track stream meta.\n", err)
+				handleErr("Failed to get track stream metadata.", err, false)
 				continue
 			}
 			streamUrl := streamMeta.Result.Stream
@@ -665,7 +702,7 @@ func main() {
 			trackPath := filepath.Join(albumPath, sanTrackFname+quality.Extension)
 			exists, err := fileExists(trackPath)
 			if err != nil {
-				fmt.Printf("Failed to check if track already exists locally.\n%s", err)
+				handleErr("Failed to check if track already exists locally.", err, false)
 				continue
 			}
 			if exists {
@@ -676,20 +713,20 @@ func main() {
 				"Downloading track %d of %d: %s - %s\n", trackNum, trackTotal, parsedMeta["title"],
 				quality.Specs,
 			)
-			err = downloadTrack(trackPath, streamUrl)
+			err = downloadTrack(trackPath, streamUrl, cfg.ByteLimit)
 			if err != nil {
-				fmt.Printf("Failed to download track.\n%s", err)
+				handleErr("Failed to download track.", err, false)
 				continue
 			}
 			err = writeTags(trackPath, coverPath, quality.IsFlac, parsedMeta)
 			if err != nil {
-				fmt.Printf("Failed to write tags.\n%s", err)
+				handleErr("Failed to write tags.", err, false)
 				continue
 			}
 			if cfg.Lyrics {
 				lyrics, err := getLyrics(trackIdStr, token)
 				if err != nil {
-					fmt.Printf("Failed to get lyrics.\n%s", err)
+					handleErr("Failed to get lyrics.", err, false)
 					continue
 				}
 				if lyrics == "" {
@@ -698,7 +735,7 @@ func main() {
 				lyricsPath := filepath.Join(albumPath, sanTrackFname+".lrc")
 				err = writeLyrics(lyrics, lyricsPath)
 				if err != nil {
-					fmt.Printf("Failed to write lyrics.\n%s", err)
+					handleErr("Failed to write lyrics.", err, false)
 					continue
 				}
 				fmt.Println("Wrote lyrics.")

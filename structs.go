@@ -3,10 +3,11 @@ package main
 type Transport struct{}
 
 type WriteCounter struct {
-	Total      uint64
+	Total      int64
 	TotalStr   string
-	Downloaded uint64
+	Downloaded int64
 	Percentage int
+	StartTime  int64
 }
 
 type Config struct {
@@ -19,6 +20,8 @@ type Config struct {
 	TrackTemplate string
 	MaxCover      bool
 	Lyrics        bool
+	SpeedLimit    float64
+	ByteLimit     int64
 }
 
 type Args struct {
@@ -28,6 +31,7 @@ type Args struct {
 	MaxCover      bool     `arg:"-m" help:"true = max cover size, false = 600x600."`
 	Lyrics        bool     `arg:"-l" help:"Get lyrics if available."`
 	TrackTemplate string   `arg:"-f" help:"Track filename naming template. Vars: album, albumArtist, artist, genre, title, track, trackPad, trackTotal, year."`
+	SpeedLimit    float64  `arg:"-L" default:"-1" help:"Download speed limit in megabytes. Example: 0.5 = 500 kB/s, 1 = 1 MB/s, 1.5 = 1.5 MB/s. -1 = unlimited."`
 }
 
 type Auth struct {
