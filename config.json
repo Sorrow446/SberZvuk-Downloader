@@ -5,6 +5,6 @@
     "outPath": "SberZvuk downloads",
     "trackTemplate": "{{.trackPad}}. {{.title}}",
     "maxCover": true,
-    "lyrics": false,
+    "lyrics": true,
     "speedLimit": -1
 }
