@@ -1,6 +1,6 @@
 # SberZvuk-Downloader
 [SberZvuk (СберЗвук)](https://dereferer.me/?https://sber-zvuk.com/) downloader written in Go.
-![](https://i.imgur.com/wx90jGV.png)
+![](https://i.imgur.com/Km3JYUF.png)
 [Windows, Linux, macOS and Android binaries](https://github.com/Sorrow446/SberZvuk-Downloader/releases)
 
 # Setup
@@ -15,6 +15,7 @@ Configure any other options if needed.
 |trackTemplate|Track filename naming template. Vars: album, albumArtist, artist, genre, title, track, trackPad, trackTotal, year.
 |maxCover|true = max cover size, false = 600x600.
 |lyrics|Get lyrics if available.
+|speedLimit|Download speed limit in megabytes. Example: 0.5 = 500 kB/s, 1 = 1 MB/s, 1.5 = 1.5 MB/s. -1 = unlimited.
 
 # Usage
 Args take priority over the same config file options.
@@ -31,7 +32,7 @@ Download a single album and from two text files in format 2 with lyrics:
 |__   | . | -_|  _|   __| | | | | '_|  |  |  | . | | | |   | | . | .'| . | -_|  _|
 |_____|___|___|_| |_____|\_/|___|_,_|  |____/|___|_____|_|_|_|___|__,|___|___|_|
 
-Usage: sberzvuk_dl_x64.exe [--format FORMAT] [--outpath OUTPATH] [--maxcover] [--lyrics] [--tracktemplate TRACKTEMPLATE] URLS [URLS ...]
+Usage: main.exe [--format FORMAT] [--outpath OUTPATH] [--maxcover] [--lyrics] [--tracktemplate TRACKTEMPLATE] [--speedlimit SPEEDLIMIT] URLS [URLS ...]
 
 Positional arguments:
   URLS
@@ -45,6 +46,8 @@ Options:
   --lyrics, -l           Get lyrics if available.
   --tracktemplate TRACKTEMPLATE, -f TRACKTEMPLATE
                          Track filename naming template. Vars: album, albumArtist, artist, genre, title, track, trackPad, trackTotal, year.
+  --speedlimit SPEEDLIMIT, -L SPEEDLIMIT
+                         Download speed limit in megabytes. Example: 0.5 = 500 kB/s, 1 = 1 MB/s, 1.5 = 1.5 MB/s. -1 = unlimited. [default: -1]
   --help, -h             display this help and exit
 ```
  
