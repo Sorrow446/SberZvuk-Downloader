@@ -1,8 +1,6 @@
 # SberZvuk-Downloader
 [SberZvuk (СберЗвук)](https://dereferer.me/?https://sber-zvuk.com/) downloader written in Go.
 ![](https://i.imgur.com/Km3JYUF.png)
-New download speed limiting function:
-![](https://i.imgur.com/cbAH5JX.png)
 [Windows, Linux, macOS and Android binaries](https://github.com/Sorrow446/SberZvuk-Downloader/releases)
 
 # Setup
