@@ -330,6 +330,7 @@ func parseTrackIds(trackIds []int) string {
 }
 
 func getStreamMeta(trackId, formatStr, token string) (*StreamMeta, error) {
+	var do *http.Response
 	req, err := http.NewRequest(http.MethodGet, apiBase+"api/tiny/track/stream", nil)
 	if err != nil {
 		return nil, err
@@ -339,16 +340,26 @@ func getStreamMeta(trackId, formatStr, token string) (*StreamMeta, error) {
 	query.Set("id", trackId)
 	query.Set("quality", formatStr)
 	req.URL.RawQuery = query.Encode()
-	do, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer do.Body.Close()
-	if do.StatusCode != http.StatusOK {
-		return nil, errors.New(do.Status)
+	for i := 0; i < 5; i++ {
+		do, err = client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		if do.StatusCode == http.StatusTeapot && i != 4 {
+			do.Body.Close()
+			fmt.Printf("Got a HTTP 418, %d attempt(s) remaining.\n", 4-i)
+			time.Sleep(time.Second * 3)
+			continue
+		}
+		if do.StatusCode != http.StatusOK {
+			do.Body.Close()
+			return nil, errors.New(do.Status)
+		}
+		break
 	}
 	var obj StreamMeta
 	err = json.NewDecoder(do.Body).Decode(&obj)
+	do.Body.Close()
 	if err != nil {
 		return nil, err
 	}
