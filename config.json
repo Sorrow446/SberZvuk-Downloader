@@ -2,9 +2,11 @@
     "email": "",
     "password": "",
     "format": 3,
-    "outPath": "SberZvuk downloads",
+    "outPath": "Zvuk downloads",
+    "albumTemplate": "{{.albumArtist}} - {{.album}}",
     "trackTemplate": "{{.trackPad}}. {{.title}}",
     "maxCover": true,
     "lyrics": true,
-    "speedLimit": -1
+    "speedLimit": -1,
+    "keepCover": true
 }

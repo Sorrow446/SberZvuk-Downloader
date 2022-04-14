@@ -30,9 +30,12 @@ import (
 )
 
 const (
-	megabyte    = 1000000
-	apiBase     = "https://sber-zvuk.com/"
-	regexString = `^https://sber-zvuk.com/release/(\d+)$`
+	megabyte      = 1000000
+	apiBase       = "https://zvuk.com/"
+	regexString   = `^https://zvuk.com/release/(\d+)$`
+	userAgent     = "OpenPlay|4.10.2|Android|7.1.2|Asus ASUS_Z01QD"
+	trackTemplate = "{{.trackPad}}. {{.title}}"
+	albumTemplate = "{{.albumArtist}} - {{.album}}"
 )
 
 var (
@@ -47,10 +50,10 @@ var (
 
 func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.Header.Add(
-		"User-Agent", "OpenPlay|4.9.1|Android|7.1.2|samsung SM-N976N",
+		"User-Agent", userAgent,
 	)
 	req.Header.Add(
-		"Referer", "https://sber-zvuk.com/",
+		"Referer", apiBase,
 	)
 	return http.DefaultTransport.RoundTrip(req)
 }
@@ -71,7 +74,7 @@ func (wc *WriteCounter) Write(p []byte) (int, error) {
 }
 
 func handleErr(errText string, err error, _panic bool) {
-	errString := fmt.Sprintf("%s\n%s", errText, err)
+	errString := errText + "\n" + err.Error()
 	if _panic {
 		panic(errString)
 	}
@@ -115,7 +118,7 @@ func readTxtFile(path string) ([]string, error) {
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line != "" {
-			lines = append(lines, strings.TrimSpace(scanner.Text()))
+			lines = append(lines, line)
 		}
 	}
 	if scanner.Err() != nil {
@@ -138,9 +141,9 @@ func processUrls(urls []string) ([]string, error) {
 		processed []string
 		txtPaths  []string
 	)
-	for _, url := range urls {
-		if strings.HasSuffix(url, ".txt") && !contains(txtPaths, url) {
-			txtLines, err := readTxtFile(url)
+	for _, _url := range urls {
+		if strings.HasSuffix(_url, ".txt") && !contains(txtPaths, _url) {
+			txtLines, err := readTxtFile(_url)
 			if err != nil {
 				return nil, err
 			}
@@ -149,10 +152,10 @@ func processUrls(urls []string) ([]string, error) {
 					processed = append(processed, txtLine)
 				}
 			}
-			txtPaths = append(txtPaths, url)
+			txtPaths = append(txtPaths, _url)
 		} else {
-			if !contains(processed, url) {
-				processed = append(processed, url)
+			if !contains(processed, _url) {
+				processed = append(processed, _url)
 			}
 		}
 	}
@@ -196,7 +199,7 @@ func parseCfg() (*Config, error) {
 		cfg.TrackTemplate = args.TrackTemplate
 	}
 	if cfg.OutPath == "" {
-		cfg.OutPath = "SberZvuk downloads"
+		cfg.OutPath = "Zvuk downloads"
 	}
 	if cfg.TrackTemplate == "" {
 		cfg.TrackTemplate = "{{.trackPad}}. {{.title}}"
@@ -297,7 +300,7 @@ func getMeta(albumId, token string) (*Meta, error) {
 	req.Header.Add("x-auth-token", token)
 	query := url.Values{}
 	query.Set("ids", albumId)
-	query.Set("include", "track,")
+	query.Set("include", "track")
 	req.URL.RawQuery = query.Encode()
 	do, err := client.Do(req)
 	if err != nil {
@@ -424,7 +427,7 @@ func parseTrackMeta(meta *Track, albMeta map[string]string, trackNum, trackTotal
 	return albMeta
 }
 
-func parseTemplate(templateText string, tags map[string]string) string {
+func parseTemplate(templateText, defTemplate string, tags map[string]string) string {
 	var buffer bytes.Buffer
 	for {
 		err := template.Must(template.New("").Parse(templateText)).Execute(&buffer, tags)
@@ -432,7 +435,7 @@ func parseTemplate(templateText string, tags map[string]string) string {
 			break
 		}
 		fmt.Println("Failed to parse template. Default will be used instead.")
-		templateText = "{{.trackPad}}. {{.title}}"
+		templateText = defTemplate
 		buffer.Reset()
 	}
 	return buffer.String()
@@ -612,18 +615,21 @@ func writeLyrics(lyrics, path string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 	_, err = f.WriteString(lyrics)
+	f.Close()
 	return err
 }
 
-func main() {
+func init() {
 	fmt.Println(`
- _____ _           _____         _      ____                _           _         
-|   __| |_ ___ ___|__   |_ _ _ _| |_   |    \ ___ _ _ _ ___| |___ ___ _| |___ ___ 
-|__   | . | -_|  _|   __| | | | | '_|  |  |  | . | | | |   | | . | .'| . | -_|  _|
-|_____|___|___|_| |_____|\_/|___|_,_|  |____/|___|_____|_|_|_|___|__,|___|___|_|
-`)
+ _____         _      ____                _           _         
+|__   |_ _ _ _| |_   |    \ ___ _ _ _ ___| |___ ___ _| |___ ___ 
+|   __| | | | | '_|  |  |  | . | | | |   | | . | .'| . | -_|  _|
+|_____|\_/|___|_,_|  |____/|___|_____|_|_|_|___|__,|___|___|_|
+   `)
+}
+
+func main() {
 	scriptDir, err := getScriptDir()
 	if err != nil {
 		panic(err)
@@ -669,13 +675,14 @@ func main() {
 		}
 		albumRelease := meta.Result.Releases[albumId]
 		parsedAlbMeta := parseAlbumMeta(&albumRelease)
-		albumFolder := parsedAlbMeta["albumArtist"] + " - " + parsedAlbMeta["album"]
-		fmt.Println(albumFolder)
+		albumFolder := parseTemplate(cfg.AlbumTemplate, albumTemplate, parsedAlbMeta)
+		fmt.Println(parsedAlbMeta["albumArtist"] + " - " + parsedAlbMeta["album"])
 		if len(albumFolder) > 120 {
 			fmt.Println("Album folder was chopped as it exceeds 120 characters.")
 			albumFolder = albumFolder[:120]
 		}
-		albumPath := filepath.Join(cfg.OutPath, sanitize(albumFolder))
+		sanAlbumFolder := sanitize(albumFolder)
+		albumPath := filepath.Join(cfg.OutPath, strings.TrimSuffix(sanAlbumFolder, "."))
 		err = makeDirs(albumPath)
 		if err != nil {
 			handleErr("Failed to make album folder.", err, false)
@@ -708,7 +715,7 @@ func main() {
 				fmt.Println("The API returned an unsupported format.")
 				continue
 			}
-			trackFname := parseTemplate(cfg.TrackTemplate, parsedMeta)
+			trackFname := parseTemplate(cfg.TrackTemplate, trackTemplate, parsedMeta)
 			sanTrackFname := sanitize(trackFname)
 			trackPath := filepath.Join(albumPath, sanTrackFname+quality.Extension)
 			exists, err := fileExists(trackPath)
@@ -750,6 +757,12 @@ func main() {
 					continue
 				}
 				fmt.Println("Wrote lyrics.")
+			}
+		}
+		if coverPath != "" && !cfg.KeepCover {
+			err := os.Remove(coverPath)
+			if err != nil {
+				handleErr("Failed to delete cover.", err, false)
 			}
 		}
 	}

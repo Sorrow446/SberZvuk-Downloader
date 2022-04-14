@@ -17,11 +17,13 @@ type Config struct {
 	Format        int
 	FormatStr     string
 	OutPath       string
+	AlbumTemplate string
 	TrackTemplate string
 	MaxCover      bool
 	Lyrics        bool
 	SpeedLimit    float64
 	ByteLimit     int64
+	KeepCover     bool
 }
 
 type Args struct {
@@ -30,6 +32,7 @@ type Args struct {
 	OutPath       string   `arg:"-o" help:"Where to download to. Path will be made if it doesn't already exist."`
 	MaxCover      bool     `arg:"-m" help:"true = max cover size, false = 600x600."`
 	Lyrics        bool     `arg:"-l" help:"Get lyrics if available."`
+	AlbumTemplate string   `arg:"-a" help:"Album folder naming template. Vars: album, albumArtist, year."`
 	TrackTemplate string   `arg:"-f" help:"Track filename naming template. Vars: album, albumArtist, artist, genre, title, track, trackPad, trackTotal, year."`
 	SpeedLimit    float64  `arg:"-L" default:"-1" help:"Download speed limit in megabytes. Example: 0.5 = 500 kB/s, 1 = 1 MB/s, 1.5 = 1.5 MB/s. -1 = unlimited."`
 }
