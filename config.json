@@ -8,5 +8,6 @@
     "maxCover": true,
     "lyrics": true,
     "speedLimit": -1,
+    "keepCover": true,
     "token": ""
 }
