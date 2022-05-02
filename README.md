@@ -18,6 +18,7 @@ Configure any other options if needed.
 |lyrics|Get lyrics if available.
 |speedLimit|Download speed limit in megabytes. Example: 0.5 = 500 kB/s, 1 = 1 MB/s, 1.5 = 1.5 MB/s. -1 = unlimited.
 |keepCover|true = don't delete covers from album folders.
+|token|Use token to auth instead of credentials. Will only be used if not empty. Get from https://zvuk.com/api/v2/tiny/profile.
 
 # Usage
 Args take priority over the same config file options.
