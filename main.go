@@ -30,12 +30,13 @@ import (
 )
 
 const (
-	megabyte      = 1000000
-	apiBase       = "https://zvuk.com/"
-	regexString   = `^https://zvuk.com/release/(\d+)$`
-	userAgent     = "OpenPlay|4.10.2|Android|7.1.2|Asus ASUS_Z01QD"
-	trackTemplate = "{{.trackPad}}. {{.title}}"
-	albumTemplate = "{{.albumArtist}} - {{.album}}"
+	megabyte       = 1000000
+	apiBase        = "https://zvuk.com/"
+	regexString    = `^https://zvuk.com/release/(\d+)$`
+	tokRegexString = `^[\da-zA-Z]{32}$`
+	userAgent      = "OpenPlay|4.10.2|Android|7.1.2|Asus ASUS_Z01QD"
+	trackTemplate  = "{{.trackPad}}. {{.title}}"
+	albumTemplate  = "{{.albumArtist}} - {{.album}}"
 )
 
 var (
@@ -232,17 +233,12 @@ func parseArgs() *Args {
 }
 
 func makeDirs(path string) error {
-	err := os.MkdirAll(path, 0755)
-	return err
+	return os.MkdirAll(path, 0755)
 }
 
-func checkUrl(url string) string {
-	regex := regexp.MustCompile(regexString)
-	match := regex.FindStringSubmatch(url)
-	if match == nil {
-		return ""
-	}
-	return match[1]
+func checkToken(token string) bool {
+	regex := regexp.MustCompile(tokRegexString)
+	return regex.MatchString(token)
 }
 
 func auth(email, pwd string) (string, error) {
@@ -270,6 +266,21 @@ func auth(email, pwd string) (string, error) {
 	return obj.Result.Token, nil
 }
 
+func getToken(token, email, password string) (string, error) {
+	var err error
+	if token != "" {
+		if !checkToken(token) {
+			return "", errors.New("Invalid token.")
+		}
+	} else {
+		token, err = auth(email, password)
+		if err != nil {
+			return "", err
+		}
+	}
+	return token, nil
+}
+
 func getUserInfo(token string) (*UserInfo, error) {
 	req, err := http.NewRequest(http.MethodGet, apiBase+"api/v2/tiny/profile", nil)
 	if err != nil {
@@ -290,6 +301,15 @@ func getUserInfo(token string) (*UserInfo, error) {
 		return nil, err
 	}
 	return &obj, nil
+}
+
+func checkUrl(url string) string {
+	regex := regexp.MustCompile(regexString)
+	match := regex.FindStringSubmatch(url)
+	if match == nil {
+		return ""
+	}
+	return match[1]
 }
 
 func getMeta(albumId, token string) (*Meta, error) {
@@ -646,7 +666,7 @@ func main() {
 	if err != nil {
 		handleErr("Failed to make output path.", err, true)
 	}
-	token, err := auth(cfg.Email, cfg.Password)
+	token, err := getToken(cfg.Token, cfg.Email, cfg.Password)
 	if err != nil {
 		handleErr("Failed to auth.", err, true)
 	}

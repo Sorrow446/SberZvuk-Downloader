@@ -24,6 +24,7 @@ type Config struct {
 	SpeedLimit    float64
 	ByteLimit     int64
 	KeepCover     bool
+	Token         string
 }
 
 type Args struct {
