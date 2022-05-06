@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"html/template"
 	"io"
 	"io/ioutil"
@@ -458,7 +459,7 @@ func parseTemplate(templateText, defTemplate string, tags map[string]string) str
 		templateText = defTemplate
 		buffer.Reset()
 	}
-	return buffer.String()
+	return html.UnescapeString(buffer.String())
 }
 
 func downloadTrack(trackPath, url string, byteLimit int64) error {
