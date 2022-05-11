@@ -49,7 +49,7 @@ Options:
   --lyrics, -l           Get lyrics if available.
   --albumtemplate ALBUMTEMPLATE, -a ALBUMTEMPLATE
                          Album folder naming template. Vars: album, albumArtist, year.
-  --tracktemplate TRACKTEMPLATE, -f TRACKTEMPLATE
+  --tracktemplate TRACKTEMPLATE, -t TRACKTEMPLATE
                          Track filename naming template. Vars: album, albumArtist, artist, genre, title, track, trackPad, trackTotal, year.
   --speedlimit SPEEDLIMIT, -L SPEEDLIMIT
                          Download speed limit in megabytes. Example: 0.5 = 500 kB/s, 1 = 1 MB/s, 1.5 = 1.5 MB/s. -1 = unlimited. [default: -1]
