@@ -339,10 +339,14 @@ func getMeta(albumId, token string) (*Meta, error) {
 	return &obj, nil
 }
 
-func sanitize(filename string) string {
-	regex := regexp.MustCompile(`[\/:*?"><|]`)
-	sanitized := regex.ReplaceAllString(filename, "_")
-	return sanitized
+func sanitize(filename string, isFolder bool) string {
+	var regexStr string
+	if isFolder {
+		regexStr = `[:*?"><|]`
+	} else {
+		regexStr = `[\/:*?"><|]`
+	}
+	return regexp.MustCompile(regexStr).ReplaceAllString(filename, "_")
 }
 
 func parseTrackIds(trackIds []int) string {
@@ -702,7 +706,7 @@ func main() {
 			fmt.Println("Album folder was chopped as it exceeds 120 characters.")
 			albumFolder = albumFolder[:120]
 		}
-		sanAlbumFolder := sanitize(albumFolder)
+		sanAlbumFolder := sanitize(albumFolder, true)
 		albumPath := filepath.Join(cfg.OutPath, strings.TrimSuffix(sanAlbumFolder, "."))
 		err = makeDirs(albumPath)
 		if err != nil {
@@ -737,7 +741,7 @@ func main() {
 				continue
 			}
 			trackFname := parseTemplate(cfg.TrackTemplate, trackTemplate, parsedMeta)
-			sanTrackFname := sanitize(trackFname)
+			sanTrackFname := sanitize(trackFname, false)
 			trackPath := filepath.Join(albumPath, sanTrackFname+quality.Extension)
 			exists, err := fileExists(trackPath)
 			if err != nil {
