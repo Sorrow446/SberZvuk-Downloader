@@ -31,13 +31,14 @@ import (
 )
 
 const (
-	megabyte       = 1000000
-	apiBase        = "https://zvuk.com/"
-	regexString    = `^https://zvuk.com/release/(\d+)$`
-	tokRegexString = `^[\da-zA-Z]{32}$`
-	userAgent      = "OpenPlay|4.10.2|Android|7.1.2|Asus ASUS_Z01QD"
-	trackTemplate  = "{{.trackPad}}. {{.title}}"
-	albumTemplate  = "{{.albumArtist}} - {{.album}}"
+	megabyte            = 1000000
+	apiBase             = "https://zvuk.com/"
+	albumRegexString    = `^https://zvuk.com/release/(\d+)$`
+	playlistRegexString = `^https://zvuk.com/playlist/(\d+)$`
+	tokRegexString      = `^[\da-zA-Z]{32}$`
+	userAgent           = "OpenPlay|4.10.2|Android|7.1.2|Asus ASUS_Z01QD"
+	trackTemplate       = "{{.trackPad}}. {{.title}}"
+	albumTemplate       = "{{.albumArtist}} - {{.album}}"
 )
 
 var (
@@ -304,23 +305,37 @@ func getUserInfo(token string) (*UserInfo, error) {
 	return &obj, nil
 }
 
-func checkUrl(url string) string {
-	regex := regexp.MustCompile(regexString)
-	match := regex.FindStringSubmatch(url)
-	if match == nil {
-		return ""
+func checkUrl(url string) ItemType {
+	matchAlbum := regexp.MustCompile(albumRegexString).FindStringSubmatch(url)
+	if matchAlbum == nil {
+		matchPlaylist := regexp.MustCompile(playlistRegexString).FindStringSubmatch(url)
+		if matchPlaylist == nil {
+			return ItemType{0, ""}
+		} else {
+			return ItemType{2, matchPlaylist[1]}
+		}
 	}
-	return match[1]
+	return ItemType{1, matchAlbum[1]}
 }
 
-func getMeta(albumId, token string) (*Meta, error) {
-	req, err := http.NewRequest(http.MethodGet, apiBase+"api/tiny/releases", nil)
+func getMeta(itemType ItemType, token string) (*Meta, error) {
+
+	var api string
+	switch itemType.TypeId {
+	case 1:
+		api = "api/tiny/releases"
+	case 2:
+		api = "api/tiny/playlists"
+	case 3:
+		//TODO single track
+	}
+	req, err := http.NewRequest(http.MethodGet, apiBase+api, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Add("x-auth-token", token)
 	query := url.Values{}
-	query.Set("ids", albumId)
+	query.Set("ids", itemType.ItemId)
 	query.Set("include", "track")
 	req.URL.RawQuery = query.Encode()
 	do, err := client.Do(req)
@@ -442,6 +457,13 @@ func parseAlbumMeta(meta *Release) map[string]string {
 	return parsedMeta
 }
 
+func parsePlaylistMeta(meta *Playlist) map[string]string {
+	parsedMeta := map[string]string{
+		"album": meta.Title,
+	}
+	return parsedMeta
+}
+
 func parseTrackMeta(meta *Track, albMeta map[string]string, trackNum, trackTotal int) map[string]string {
 	albMeta["artist"] = strings.Join(meta.ArtistNames, ", ")
 	albMeta["genre"] = strings.Join(meta.Genres, ", ")
@@ -506,7 +528,31 @@ func downloadTrack(trackPath, url string, byteLimit int64) error {
 	return err
 }
 
-func downloadCover(url, path string, maxCover bool) error {
+func downloadPlaylistCover(playlist Playlist, path string, maxCover bool) error {
+	var url string
+	if maxCover {
+		url = apiBase + playlist.ImageUrlBig
+	} else {
+		url = apiBase + playlist.ImageUrl
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0755)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	req, err := client.Get(url)
+	if err != nil {
+		return err
+	}
+	defer req.Body.Close()
+	if req.StatusCode != http.StatusOK {
+		return errors.New(req.Status)
+	}
+	_, err = io.Copy(f, req.Body)
+	return err
+}
+
+func downloadAlbumCover(url, path string, maxCover bool) error {
 	rep := ""
 	if !maxCover {
 		rep = "&size=600x600"
@@ -587,12 +633,12 @@ func writeMp3Tags(decTrackPath string, tags map[string]string, imgData []byte) e
 	return tag.Save()
 }
 
-func writeTags(decTrackPath, coverPath string, isFlac bool, tags map[string]string) error {
+func writeTags(decTrackPath, coverPath string, isFlac bool, tags map[string]string, writeCover bool) error {
 	var (
 		err     error
 		imgData []byte
 	)
-	if coverPath != "" {
+	if coverPath != "" && writeCover {
 		imgData, err = ioutil.ReadFile(coverPath)
 		if err != nil {
 			return err
@@ -645,6 +691,79 @@ func writeLyrics(lyrics, path string) error {
 	return err
 }
 
+func downloadTracks(trackIds []int, meta *Meta, cfg *Config, parsedAlbMeta map[string]string, token string, albumPath string, coverPath string, writeCover bool) {
+	trackTotal := len(trackIds)
+	for trackNum, trackId := range trackIds {
+		trackNum++
+		trackIdStr := strconv.Itoa(trackId)
+		track := meta.Result.Tracks[trackIdStr]
+		parsedMeta := parseTrackMeta(&track, parsedAlbMeta, trackNum, trackTotal)
+		if cfg.Format != 1 {
+			queryQualities(&track, cfg)
+		}
+		streamMeta, err := getStreamMeta(trackIdStr, cfg.FormatStr, token)
+		if err != nil {
+			handleErr("Failed to get track stream metadata.", err, false)
+			continue
+		}
+		streamUrl := streamMeta.Result.Stream
+		quality := queryRetQuality(streamUrl)
+		if quality == nil {
+			fmt.Println("The API returned an unsupported format.")
+			continue
+		}
+		trackFname := parseTemplate(cfg.TrackTemplate, trackTemplate, parsedMeta)
+		sanTrackFname := sanitize(trackFname, false)
+		trackPath := filepath.Join(albumPath, sanTrackFname+quality.Extension)
+		exists, err := fileExists(trackPath)
+		if err != nil {
+			handleErr("Failed to check if track already exists locally.", err, false)
+			continue
+		}
+		if exists {
+			fmt.Println("Track already exists locally.")
+			continue
+		}
+		fmt.Printf(
+			"Downloading track %d of %d: %s - %s\n", trackNum, trackTotal, parsedMeta["title"],
+			quality.Specs,
+		)
+		err = downloadTrack(trackPath, streamUrl, cfg.ByteLimit)
+		if err != nil {
+			handleErr("Failed to download track.", err, false)
+			continue
+		}
+		err = writeTags(trackPath, coverPath, quality.IsFlac, parsedMeta, writeCover)
+		if err != nil {
+			handleErr("Failed to write tags.", err, false)
+			continue
+		}
+		if cfg.Lyrics {
+			lyrics, err := getLyrics(trackIdStr, token)
+			if err != nil {
+				handleErr("Failed to get lyrics.", err, false)
+				continue
+			}
+			if lyrics == "" {
+				continue
+			}
+			lyricsPath := filepath.Join(albumPath, sanTrackFname+".lrc")
+			err = writeLyrics(lyrics, lyricsPath)
+			if err != nil {
+				handleErr("Failed to write lyrics.", err, false)
+				continue
+			}
+			fmt.Println("Wrote lyrics.")
+		}
+	}
+	if coverPath != "" && !cfg.KeepCover {
+		err := os.Remove(coverPath)
+		if err != nil {
+			handleErr("Failed to delete cover.", err, false)
+		}
+	}
+}
+
 func init() {
 	fmt.Println(`
  _____         _      ____                _           _         
@@ -685,110 +804,76 @@ func main() {
 	fmt.Println(
 		"Signed in successfully - " + userInfo.Result.Subscription.Name + "\n",
 	)
-	albumTotal := len(cfg.Urls)
-	for albumNum, url := range cfg.Urls {
-		fmt.Printf("Album %d of %d:\n", albumNum+1, albumTotal)
-		albumId := checkUrl(url)
-		if albumId == "" {
+	itemTotal := len(cfg.Urls)
+	for itemNum, url := range cfg.Urls {
+		fmt.Printf("Album/Playlist %d of %d:\n", itemNum+1, itemTotal)
+		itemType := checkUrl(url)
+		switch itemType.TypeId {
+		case 0:
+			// not supported yet type
 			fmt.Println("Invalid URL:", url)
 			continue
-		}
-		meta, err := getMeta(albumId, token)
-		if err != nil {
-			handleErr("Failed to get album metadata.", err, false)
-			continue
-		}
-		albumRelease := meta.Result.Releases[albumId]
-		parsedAlbMeta := parseAlbumMeta(&albumRelease)
-		albumFolder := parseTemplate(cfg.AlbumTemplate, albumTemplate, parsedAlbMeta)
-		fmt.Println(parsedAlbMeta["albumArtist"] + " - " + parsedAlbMeta["album"])
-		if len(albumFolder) > 120 {
-			fmt.Println("Album folder was chopped as it exceeds 120 characters.")
-			albumFolder = albumFolder[:120]
-		}
-		sanAlbumFolder := sanitize(albumFolder, true)
-		albumPath := filepath.Join(cfg.OutPath, strings.TrimSuffix(sanAlbumFolder, "."))
-		err = makeDirs(albumPath)
-		if err != nil {
-			handleErr("Failed to make album folder.", err, false)
-			continue
-		}
-		trackIds := albumRelease.TrackIds
-		coverPath := filepath.Join(albumPath, "cover.jpg")
-		err = downloadCover(albumRelease.Image.Src, coverPath, cfg.MaxCover)
-		if err != nil {
-			handleErr("Failed to get cover.", err, false)
-			coverPath = ""
-		}
-		trackTotal := len(trackIds)
-		for trackNum, trackId := range trackIds {
-			trackNum++
-			trackIdStr := strconv.Itoa(trackId)
-			track := meta.Result.Tracks[trackIdStr]
-			parsedMeta := parseTrackMeta(&track, parsedAlbMeta, trackNum, trackTotal)
-			if cfg.Format != 1 {
-				queryQualities(&track, cfg)
-			}
-			streamMeta, err := getStreamMeta(trackIdStr, cfg.FormatStr, token)
+
+		case 1:
+			//album
+			meta, err := getMeta(itemType, token)
 			if err != nil {
-				handleErr("Failed to get track stream metadata.", err, false)
+				handleErr("Failed to get album metadata.", err, false)
 				continue
 			}
-			streamUrl := streamMeta.Result.Stream
-			quality := queryRetQuality(streamUrl)
-			if quality == nil {
-				fmt.Println("The API returned an unsupported format.")
-				continue
+			albumRelease := meta.Result.Releases[itemType.ItemId]
+			parsedMeta := parseAlbumMeta(&albumRelease)
+			albumFolder := parseTemplate(cfg.AlbumTemplate, albumTemplate, parsedMeta)
+			fmt.Println(parsedMeta["albumArtist"] + " - " + parsedMeta["album"])
+			if len(albumFolder) > 120 {
+				fmt.Println("Album folder was chopped as it exceeds 120 characters.")
+				albumFolder = albumFolder[:120]
 			}
-			trackFname := parseTemplate(cfg.TrackTemplate, trackTemplate, parsedMeta)
-			sanTrackFname := sanitize(trackFname, false)
-			trackPath := filepath.Join(albumPath, sanTrackFname+quality.Extension)
-			exists, err := fileExists(trackPath)
+			sanAlbumFolder := sanitize(albumFolder, true)
+			path := filepath.Join(cfg.OutPath, strings.TrimSuffix(sanAlbumFolder, "."))
+			err = makeDirs(path)
 			if err != nil {
-				handleErr("Failed to check if track already exists locally.", err, false)
+				handleErr("Failed to make album folder.", err, false)
 				continue
 			}
-			if exists {
-				fmt.Println("Track already exists locally.")
-				continue
-			}
-			fmt.Printf(
-				"Downloading track %d of %d: %s - %s\n", trackNum, trackTotal, parsedMeta["title"],
-				quality.Specs,
-			)
-			err = downloadTrack(trackPath, streamUrl, cfg.ByteLimit)
+			coverPath := filepath.Join(path, "cover.jpg")
+			err = downloadAlbumCover(albumRelease.Image.Src, coverPath, cfg.MaxCover)
 			if err != nil {
-				handleErr("Failed to download track.", err, false)
+				handleErr("Failed to get cover.", err, false)
+				coverPath = ""
+			}
+			trackIds := albumRelease.TrackIds
+			downloadTracks(trackIds, meta, cfg, parsedMeta, token, path, coverPath, true)
+
+		case 2:
+			//playlist
+			meta, err := getMeta(itemType, token)
+			if err != nil {
+				handleErr("Failed to get playlist metadata.", err, false)
 				continue
 			}
-			err = writeTags(trackPath, coverPath, quality.IsFlac, parsedMeta)
+			playlist := meta.Result.Playlists[itemType.ItemId]
+			playlistFolder := playlist.Title
+			if len(playlistFolder) > 120 {
+				fmt.Println("Playlist folder was chopped as it exceeds 120 characters.")
+				playlistFolder = playlistFolder[:120]
+			}
+			sanPlaylistFolder := sanitize(playlistFolder, true)
+			path := filepath.Join(cfg.OutPath, strings.TrimSuffix(sanPlaylistFolder, "."))
+			err = makeDirs(path)
 			if err != nil {
-				handleErr("Failed to write tags.", err, false)
+				handleErr("Failed to make playlist folder.", err, false)
 				continue
 			}
-			if cfg.Lyrics {
-				lyrics, err := getLyrics(trackIdStr, token)
-				if err != nil {
-					handleErr("Failed to get lyrics.", err, false)
-					continue
-				}
-				if lyrics == "" {
-					continue
-				}
-				lyricsPath := filepath.Join(albumPath, sanTrackFname+".lrc")
-				err = writeLyrics(lyrics, lyricsPath)
-				if err != nil {
-					handleErr("Failed to write lyrics.", err, false)
-					continue
-				}
-				fmt.Println("Wrote lyrics.")
-			}
-		}
-		if coverPath != "" && !cfg.KeepCover {
-			err := os.Remove(coverPath)
+			coverPath := filepath.Join(path, "cover.jpg")
+			err = downloadPlaylistCover(playlist, coverPath, cfg.MaxCover)
 			if err != nil {
-				handleErr("Failed to delete cover.", err, false)
+				handleErr("Failed to get cover.", err, false)
+				coverPath = ""
 			}
+
+			parsedMeta := parsePlaylistMeta(&playlist)
+			downloadTracks(playlist.TrackIds, meta, cfg, parsedMeta, token, path, coverPath, false)
 		}
 	}
 }

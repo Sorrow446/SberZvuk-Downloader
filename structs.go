@@ -4272,6 +4272,13 @@ type UserInfo struct {
 	} `json:"result"`
 }
 
+type Playlist struct {
+	ImageUrl    string `json:"image_url"`
+	ImageUrlBig string `json:"image_url_big"`
+	Title       string `json:"title"`
+	TrackIds    []int  `json:"track_ids"`
+}
+
 type Release struct {
 	ArtistIds []int  `json:"artist_ids"`
 	Template  string `json:"template"`
@@ -4327,18 +4334,13 @@ type Track struct {
 
 type Meta struct {
 	Result struct {
-		Tracks    map[string]Track `json:"tracks"`
-		Playlists struct {
-		} `json:"playlists"`
-		RadioWaves struct {
-		} `json:"radio_waves"`
-		Releases map[string]Release `json:"releases"`
-		Artists  struct {
-		} `json:"artists"`
-		Labels struct {
-		} `json:"labels"`
-		Users struct {
-		} `json:"users"`
+		Tracks     map[string]Track    `json:"tracks"`
+		Playlists  map[string]Playlist `json:"playlists"`
+		RadioWaves struct{}            `json:"radio_waves"`
+		Releases   map[string]Release  `json:"releases"`
+		Artists    struct{}            `json:"artists"`
+		Labels     struct{}            `json:"labels"`
+		Users      struct{}            `json:"users"`
 	} `json:"result"`
 }
 
@@ -4348,6 +4350,11 @@ type StreamMeta struct {
 		ExpireDelta int    `json:"expire_delta"`
 		Stream      string `json:"stream"`
 	} `json:"result"`
+}
+
+type ItemType struct {
+	TypeId byte
+	ItemId string
 }
 
 type Quality struct {
