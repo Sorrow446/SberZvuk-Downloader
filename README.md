@@ -1,4 +1,5 @@
 # Zvuk-Downloader
+**Archived. Might port to Rust in the future.**
 [Zvuk (Звук)](https://dereferer.me/?https://zvuk.com/) downloader written in Go.
 ![](https://i.imgur.com/N706D0w.png)
 [Windows, Linux, macOS and Android binaries](https://github.com/Sorrow446/SberZvuk-Downloader/releases)
