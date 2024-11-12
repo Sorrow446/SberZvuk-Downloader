@@ -4,10 +4,11 @@
     "format": 3,
     "outPath": "Zvuk downloads",
     "albumTemplate": "{{.albumArtist}} - {{.album}}",
-    "trackTemplate": "{{.trackPad}}. {{.title}}",
+    "trackTemplate": "{{.trackPad}}-{{.title}}",
+    "playlistTemplate": "{{.artist}} - {{.title}}",
     "maxCover": true,
     "lyrics": true,
     "speedLimit": -1,
     "keepCover": true,
-    "token": ""
+    "folderForSingle": false
 }
